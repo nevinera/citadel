@@ -24,10 +24,20 @@ who sent it) and writes game state out to stdout.
 - player program (one per connected player) that websocketd forks off
 - game program (single process) which the player programs communicate with that
   tracks/interprets/computes game state.
+- atomic-tailer that listens to game program and keeps a file atomically updated
+  with the current game state, so that player programs can just read it out at
+  regular intervals.
 
 ### Authentication
 
-TODO
+There is a directory that contains a tokens file containing K lines, each of which
+has nothing but a token in it, and also possibly containing files named using the
+tokens. When citp is spun up for a new socket connection, it will expect to receive
+a `token` parameter containing some token in that file. If the token is not listed
+in the tokens file, then it will close the connection and terminate; otherwise it
+will remember the token and touch the file for that token with every up-message.
+
+The static site will have basic-auth enabled,
 
 ### Static Client Site
 
@@ -59,7 +69,7 @@ writes, and does: log, command-recv, state-send.
 This program should be fast, but could otherwise be almost anything. For now we'll
 assume I'm writing it in C. It will be called 'citp', and its options are:
 
-- `auth`: The path to an authentication text file as described earlier.
+- `auth`: The path to an authentication directory as described earlier.
 - `log`: This is where to log warnings, errors, etc. STDERR by default.
 - `input-log`, `output-log`: Passing these causes citp to log the relevant stream
   into the supplied path.
@@ -83,6 +93,19 @@ dominated by waiting - if that is not so then we may need to introduce some addi
 steps to sync up iterations better. In particular, if the AI phase is too slow, we may
 move that to the end of the loop, and allow the monsters to react one frame slower than
 players do.
+
+### Atomic Tailer
+
+This process listens to the fifo or stream coming out of citd, and either (a) keeps a
+single file atomically updated to the most recent line of output from citd, or
+(b) writes new files with a systematic numbering scheme, and cleans them up after some
+number of generations.
+
+The point of the latter (more complicated) approach is that it allows for synchronization
+between citp and citd on the state stream - instead of sending out state every N ms,
+even if citd hasn't finished building it (or sending out state whenever citd finished
+building), we can write state into a file that will stick around until well after citp
+should have read and used it, and allows citp to decide when exactly that will happen.
 
 ## Message Representation
 
